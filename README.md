@@ -2,7 +2,7 @@
 This is a tool to parse language dumps from Wiktionary and store the results into a Sqlite database.
 
 ## Current Limitations
-- Only parses single words. No entries with ' ', '-', ':' in them.
+- Only parses single words. No entries with ' ', '-', ':' in the page title (e.g. Wiktionary:Main\_Page).
 - It only looks at 14 lemmas
 - Does not clean the definition. Meaning it looks like raw wiki markup. This is something that will be fixed in the near future.
 
