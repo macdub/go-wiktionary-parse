@@ -7,6 +7,8 @@ This is a tool to parse language dumps from Wiktionary and store the results int
 - Does not clean the definition. Meaning it looks like raw wiki markup. This is something that will be fixed in the near future.
 
 ## Database
+- [Pre-Built Databases](http://www.mcdojoh.com/wiktionary_dbs)
+
 ### Structure
 - table name: dictionary
 
