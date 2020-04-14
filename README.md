@@ -9,6 +9,7 @@ This is a tool to parse language dumps from Wiktionary and store the results int
 ## Database
 ### Structure
 - table name: dictionary
+
 | COLUMN         | TYPE    |
 |:--------------:|:-------:|
 | id             | integer |
