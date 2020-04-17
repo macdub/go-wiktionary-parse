@@ -1,2 +1,5 @@
 *.gob
 *.swp
+logs/
+scratch/
+build/

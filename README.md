@@ -1,6 +1,35 @@
 # go-wiktionary-parse
 This is a tool to parse language dumps from Wiktionary and store the results into a Sqlite database.
 
+## Usage
+```
+Usage of wiktionary-parser:
+    -cache_file string
+        Use this as the cache file (default "xmlCache.gob")
+    -database string
+        Database file to use (default "database.db")
+    -file string
+        XML file to parse
+    -lang string
+        Language to target for parsing (default "English")
+    -log_file string
+        Log to this file
+    -make_cache
+        Make a cache file of the parsed XML
+    -use_cache
+        Use a 'gob' of the parsed XML file
+    -verbose
+        Use verbose logging
+```
+
+## Build
+### Dependencies
+- ColorLog: https://github.com/macdub/go-colorlog
+- Sqlite3: https://github.com/mattn/go-sqlite3
+
+### Build
+`$ go build -o wiktionary-parser main.go`
+
 ## Current Limitations
 - Only parses single words. No entries with ' ', '-', ':' in the page title (e.g. Wiktionary:Main\_Page).
 - It only looks at 14 lemmas
