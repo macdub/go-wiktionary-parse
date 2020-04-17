@@ -17,6 +17,7 @@ import (
 )
 
 var (
+    // regex pointers
 	wikiLang       *regexp.Regexp     = regexp.MustCompile(`(\s==|^==)[\w\s]+==`)          // most languages are a single word; there are some that are multiple words
 	wikiLemmaM     *regexp.Regexp     = regexp.MustCompile(`(\s====|^====)[\w\s]+====`)    // lemmas could be multi-word (e.g. "Proper Noun") match for multi-etymology
 	wikiLemmaS     *regexp.Regexp     = regexp.MustCompile(`(\s===|^===)[\w\s]+===`)       // lemma match for single etymology
@@ -30,6 +31,8 @@ var (
 	wikiWordAlt    *regexp.Regexp     = regexp.MustCompile(`\[\[([\w\s]+)\|[\w\s]+\]\]`)
 	wikiModifier   *regexp.Regexp     = regexp.MustCompile(`\{\{m\|\w+\|([\w\s]+)\}\}`)
 	wikiLabel      *regexp.Regexp     = regexp.MustCompile(`\{\{(la?be?l?)\|\w+\|([\w\s\|'",;\(\)_\[\]-]+)\}\}`)
+
+    // other stuff
 	language       string             = ""
 	logger         *colorlog.ColorLog = &colorlog.ColorLog{}
 	lemmaList      []string           = []string{"Proper noun", "Noun", "Adjective", "Adverb",
