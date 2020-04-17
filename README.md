@@ -26,7 +26,7 @@ This is a tool to parse language dumps from Wiktionary and store the results int
 
 ### Statistics
 - The wiktionary dump as of 20200401 that is only the current version is ~3.3GB
-- The database file that is built is ~104MB
+- The database (20200416) file that is built is ~98MB
   - 717,438 words
   - 941,713 definitions
   - 14 lemmas

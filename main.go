@@ -26,6 +26,10 @@ var (
 	wikiNumList    *regexp.Regexp     = regexp.MustCompile(`\s?#[^:\*] `)                  // used to find the num list entries that are of concern
 	wikiGenHeading *regexp.Regexp     = regexp.MustCompile(`(\s=+|^=+)[\w\s]+`)            // generic heading search
 	wikiNewLine    *regexp.Regexp     = regexp.MustCompile(`\n`)
+    wikiBracket    *regexp.Regexp     = regexp.MustCompile(`[\[\]]+`)
+    wikiWordAlt    *regexp.Regexp     = regexp.MustCompile(`\[\[([\w\s]+)\|[\w\s]+\]\]`)
+    wikiModifier   *regexp.Regexp     = regexp.MustCompile(`\{\{m\|\w+\|([\w\s]+)\}\}`)
+    wikiLabel      *regexp.Regexp     = regexp.MustCompile(`\{\{(la?be?l?)\|\w+\|([\w\s\|'",;\(\)_\[\]-]+)\}\}`)
 	language       string             = ""
 	logger         *colorlog.ColorLog = &colorlog.ColorLog{}
 	lemmaList      []string           = []string{"Proper noun", "Noun", "Adjective", "Adverb",
@@ -138,20 +142,33 @@ func main() {
 	logger.Info("Post filter page count: %d\n", len(data.Pages))
 
 	// next step to work through each page and parse out the lemmas and definitions
-	// count := 30
+    //count := 0
 	for _, page := range data.Pages {
-		//if count <= 0 {
-		//	break
-		//}
-		//count--
+        //if count >= 100 {
+        //    break
+        //}
+        //count++
 
 		word := page.Title
 		inserts := []*Insert{} // etymology : lemma : [definitions...]
-		logger.Debug("-----START " + word + "-----\n")
-		logger.Info("Processing page: %s\n", word)
+		logger.Debug("Processing page: %s\n", word)
 
 		// convert the text to a byte string
 		text := []byte(page.Revisions[0].Text)
+        logger.Debug("Raw size: %d\n", len(text))
+
+        text = wikiModifier.ReplaceAll(text, []byte("'$1'"))
+        logger.Debug("Modifier size: %d\n", len(text))
+
+        text = wikiLabel.ReplaceAll(text, []byte("(${2})"))
+        logger.Debug("Label size: %d\n", len(text))
+
+        text = wikiWordAlt.ReplaceAll(text, []byte("$1"))
+        logger.Debug("WordAlt size: %d\n", len(text))
+
+        text = wikiBracket.ReplaceAll(text, []byte(""))
+        logger.Debug("Bracket size: %d\n", len(text))
+
 		text_size := len(text)
 		logger.Debug("Starting Size of corpus: %d bytes\n", text_size)
 
@@ -181,11 +198,10 @@ func main() {
 		}
 
 		logger.Debug("Definition map:\n%+v\n", inserts)
-		logger.Debug("-----END " + word + "-----\n")
 
 		// perform inserts
 		inserted := performInserts(dbh, word, inserts)
-		logger.Info("Inserted %d records\n", inserted)
+		logger.Info("Inserted %d records for %s\n", inserted, word)
 	}
 
     end_time := time.Now()
@@ -327,31 +343,15 @@ func getDefinitions(start int, end int, text []byte) []string {
 			continue
 		}
 
-		logger.Debug("getDefinitions> Checks: (i+1 >= nl_indices_size)=>%5t (lemma_sect[ith_idx:nl_indices[i][1]] == '# ')=>%t\n",
-			(i+1 >= nl_indices_size), (string(lemma_sect[ith_idx:nl_indices[i][1]]) == "# "))
 		if i+1 >= nl_indices_size && string(lemma_sect[ith_idx:nl_indices[i][1]]) == "# " {
-			def := lemma_sect[nl_indices[i][1]:]
-			idx := wikiNewLine.FindIndex(def)
-			logger.Debug("getDefinitions> Sizeof(def)=>%d range=>[%d, %d)\n", len(def), nl_indices[i][1], len(lemma_sect))
-			logger.Debug("getDefinitions> [%0d] NewLine index: %v\n", i, idx)
-			if idx != nil {
-				def = def[:idx[0]]
-			}
+            def := parseDefinition(nl_indices[i][1], len(lemma_sect), lemma_sect)
 			logger.Debug("getDefinitions> [%0d] Appending %s to the definition list\n", i, string(def))
 			defs = append(defs, string(def))
 		}
 
-		logger.Debug("getDefinitions> Checks: (i+1 <  nl_indices_size)=>%5t (lemma_sect[ith_idx:nl_indices[i][1]] == '# ')=>%t\n",
-			(i+1 < nl_indices_size), (string(lemma_sect[ith_idx:nl_indices[i][1]]) == "# "))
 		if i+1 < nl_indices_size && string(lemma_sect[ith_idx:nl_indices[i][1]]) == "# " {
 			ith_1_idx := adjustIndexLW(nl_indices[i+1][0], lemma_sect)
-			def := lemma_sect[nl_indices[i][1]:ith_1_idx]
-			idx := wikiNewLine.FindIndex(def)
-			logger.Debug("getDefinitions> Sizeof(def)=>%d range=>[%d, %d)\n", len(def), nl_indices[i][1], len(lemma_sect))
-			logger.Debug("getDefinitions> [%0d] NewLine index (i:i+1): %v\n", i, idx)
-			if idx != nil {
-				def = def[:idx[0]]
-			}
+            def := parseDefinition(nl_indices[i][1], ith_1_idx, lemma_sect)
 			logger.Debug("getDefinitions> [%0d] Appending %s to the definition list\n", i, string(def))
 			defs = append(defs, string(def))
 		}
@@ -359,6 +359,17 @@ func getDefinitions(start int, end int, text []byte) []string {
 
 	logger.Debug("getDefinitions> Got %d definitions\n", len(defs))
 	return defs
+}
+
+func parseDefinition(start int, end int, text []byte) []byte {
+    def := text[start:end]
+    idx := wikiNewLine.FindIndex(def)
+
+    if idx != nil {
+        def = def[:idx[0]]
+    }
+
+    return def
 }
 
 func getLanguageSection(text []byte) []byte {
