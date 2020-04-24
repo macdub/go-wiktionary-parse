@@ -1,6 +1,7 @@
 package main
 
 import (
+	//".wikitemplates"
 	"database/sql"
 	"encoding/gob"
 	"encoding/xml"
@@ -17,25 +18,26 @@ import (
 )
 
 var (
-    // regex pointers
-	wikiLang       *regexp.Regexp     = regexp.MustCompile(`(\s==|^==)[\w\s]+==`)          // most languages are a single word; there are some that are multiple words
-	wikiLemmaM     *regexp.Regexp     = regexp.MustCompile(`(\s====|^====)[\w\s]+====`)    // lemmas could be multi-word (e.g. "Proper Noun") match for multi-etymology
-	wikiLemmaS     *regexp.Regexp     = regexp.MustCompile(`(\s===|^===)[\w\s]+===`)       // lemma match for single etymology
-	wikiEtymologyS *regexp.Regexp     = regexp.MustCompile(`(\s===|^===)Etymology===`)     // check for singular etymology
-	wikiEtymologyM *regexp.Regexp     = regexp.MustCompile(`(\s===|^===)Etymology \d+===`) // these heading may or may not have a number designation
-	wikiNumListAny *regexp.Regexp     = regexp.MustCompile(`\s?#[\*:]? `)                  // used to find all num list indices
-	wikiNumList    *regexp.Regexp     = regexp.MustCompile(`\s?#[^:\*] `)                  // used to find the num list entries that are of concern
-	wikiGenHeading *regexp.Regexp     = regexp.MustCompile(`(\s=+|^=+)[\w\s]+`)            // generic heading search
-	wikiNewLine    *regexp.Regexp     = regexp.MustCompile(`\n`)
-	wikiBracket    *regexp.Regexp     = regexp.MustCompile(`[\[\]]+`)
-	wikiWordAlt    *regexp.Regexp     = regexp.MustCompile(`\[\[([\w\s]+)\|[\w\s]+\]\]`)
-	wikiModifier   *regexp.Regexp     = regexp.MustCompile(`\{\{m\|\w+\|([\w\s]+)\}\}`)
-	wikiLabel      *regexp.Regexp     = regexp.MustCompile(`\{\{(la?be?l?)\|\w+\|([\w\s\|'",;\(\)_\[\]-]+)\}\}`)
+	// regex pointers
+	wikiLang       *regexp.Regexp = regexp.MustCompile(`(\s==|^==)[\w\s]+==`)          // most languages are a single word; there are some that are multiple words
+	wikiLemmaM     *regexp.Regexp = regexp.MustCompile(`(\s====|^====)[\w\s]+====`)    // lemmas could be multi-word (e.g. "Proper Noun") match for multi-etymology
+	wikiLemmaS     *regexp.Regexp = regexp.MustCompile(`(\s===|^===)[\w\s]+===`)       // lemma match for single etymology
+	wikiEtymologyS *regexp.Regexp = regexp.MustCompile(`(\s===|^===)Etymology===`)     // check for singular etymology
+	wikiEtymologyM *regexp.Regexp = regexp.MustCompile(`(\s===|^===)Etymology \d+===`) // these heading may or may not have a number designation
+	wikiNumListAny *regexp.Regexp = regexp.MustCompile(`\s?#[\*:]? `)                  // used to find all num list indices
+	wikiNumList    *regexp.Regexp = regexp.MustCompile(`\s?#[^:\*] `)                  // used to find the num list entries that are of concern
+	wikiGenHeading *regexp.Regexp = regexp.MustCompile(`(\s=+|^=+)[\w\s]+`)            // generic heading search
+	wikiNewLine    *regexp.Regexp = regexp.MustCompile(`\n`)
+	wikiBracket    *regexp.Regexp = regexp.MustCompile(`[\[\]]+`)
+	wikiWordAlt    *regexp.Regexp = regexp.MustCompile(`\[\[([\w\s]+)\|[\w\s]+\]\]`)
+	wikiModifier   *regexp.Regexp = regexp.MustCompile(`\{\{m\|\w+\|([\w\s]+)\}\}`)
+	wikiLabel      *regexp.Regexp = regexp.MustCompile(`\{\{(la?be?l?)\|\w+\|([\w\s\|'",;\(\)_\[\]-]+)\}\}`)
+	wikiTplt       *regexp.Regexp = regexp.MustCompile(`\{\{|\}\}`) // open close template bounds "{{ ... }}"
 
-    // other stuff
-	language       string             = ""
-	logger         *colorlog.ColorLog = &colorlog.ColorLog{}
-	lemmaList      []string           = []string{"Proper noun", "Noun", "Adjective", "Adverb",
+	// other stuff
+	language  string             = ""
+	logger    *colorlog.ColorLog = &colorlog.ColorLog{}
+	lemmaList []string           = []string{"Proper noun", "Noun", "Adjective", "Adverb",
 		"Verb", "Article", "Particle", "Conjunction",
 		"Pronoun", "Determiner", "Interjection", "Morpheme",
 		"Numeral", "Preposition", "Postposition"}
@@ -372,6 +374,8 @@ func parseDefinition(start int, end int, text []byte) []byte {
 		def = def[:idx[0]]
 	}
 
+	// need to parse the templates in the definition
+	//idx = wikiTplt.FindAllIndex(def, -1)
 	return def
 }
 
