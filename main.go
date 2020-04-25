@@ -77,6 +77,7 @@ func main() {
 	lang := flag.String("lang", "English", "Language to target for parsing")
 	cacheFile := flag.String("cache_file", "xmlCache.gob", "Use this as the cache file")
 	logFile := flag.String("log_file", "", "Log to this file")
+    threads := flag.Int("threads", 5, "Number of threads to use for parsing")
 	useCache := flag.Bool("use_cache", false, "Use a 'gob' of the parsed XML file")
 	makeCache := flag.Bool("make_cache", false, "Make a cache file of the parsed XML")
 	verbose := flag.Bool("verbose", false, "Use verbose logging")
@@ -151,15 +152,15 @@ func main() {
 
 	// split the work into 5 chunks
 	var chunks [][]Page
-	size := len(data.Pages) / 5
+	size := len(data.Pages) / *threads
 	logger.Debug("Chunk size: %d\n", size)
 	logger.Debug(" >> %d\n", len(data.Pages)/size)
 	for i := 0; i < len(data.Pages)/size; i++ {
 		end := size + size*i
-		if end > len(data.Pages) {
+		if end > len(data.Pages) || i+1 == len(data.Pages)/size {
 			end = len(data.Pages)
 		}
-		logger.Debug("Splitting chunk %d :: [%d, %d)\n", i, size*i, end)
+		logger.Debug("Splitting chunk %d :: [%d, %d]\n", i, size*i, end)
 		chunks = append(chunks, data.Pages[size*i:end])
 	}
 
@@ -167,7 +168,7 @@ func main() {
 	logger.Debug("Chunk Page Last: %s Page Last: %s\n", chunks[4][len(chunks[4])-1].Title, data.Pages[len(data.Pages)-1].Title)
 
 	var wg sync.WaitGroup
-	for i := 0; i < 5; i++ {
+	for i := 0; i < *threads; i++ {
 		wg.Add(1)
 		go pageWorker(i, &wg, chunks[i], dbh)
 	}
@@ -232,7 +233,7 @@ func pageWorker(id int, wg *sync.WaitGroup, pages []Page, dbh *sql.DB) {
 
 	// perform inserts
 	inserted := performInserts(dbh, inserts)
-	logger.Info("[%d] Inserted %d records for %d pages\n", id, inserted, len(pages))
+	logger.Info("[%2d] Inserted %6d records for %6d pages\n", id, inserted, len(pages))
 }
 
 func performInserts(dbh *sql.DB, inserts []*Insert) int {
