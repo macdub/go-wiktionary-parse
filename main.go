@@ -11,6 +11,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/macdub/go-colorlog"
@@ -65,6 +66,7 @@ type Revision struct {
 }
 
 type Insert struct {
+    Word      string
 	Etymology int
 	LemmaDefs map[string][]string
 }
@@ -122,8 +124,9 @@ func main() {
 
 	logger.Debug("Number of Pages: %d\n", len(data.Pages))
 	logger.Info("Opening database\n")
-	dbh, err := sql.Open("sqlite3", *db)
+	dbh, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?cache=shared&mode=rwc&_mutex=full&_busy_timeout=500", *db))
 	check(err)
+	dbh.SetMaxOpenConns(1)
 
 	sth, err := dbh.Prepare(`CREATE TABLE IF NOT EXISTS dictionary
                              (
@@ -146,16 +149,40 @@ func main() {
 	filterPages(data)
 	logger.Info("Post filter page count: %d\n", len(data.Pages))
 
-	// next step to work through each page and parse out the lemmas and definitions
-	//count := 0
-	for _, page := range data.Pages {
-		//if count >= 100 {
-		//    break
-		//}
-		//count++
+	// split the work into 5 chunks
+	var chunks [][]Page
+	size := len(data.Pages) / 5
+	logger.Debug("Chunk size: %d\n", size)
+	logger.Debug(" >> %d\n", len(data.Pages)/size)
+	for i := 0; i < len(data.Pages)/size; i++ {
+		end := size + size*i
+		if end > len(data.Pages) {
+			end = len(data.Pages)
+		}
+		logger.Debug("Splitting chunk %d :: [%d, %d)\n", i, size*i, end)
+		chunks = append(chunks, data.Pages[size*i:end])
+	}
 
+	logger.Debug("Have %d chunks\n", len(chunks))
+	logger.Debug("Chunk Page Last: %s Page Last: %s\n", chunks[4][len(chunks[4])-1].Title, data.Pages[len(data.Pages)-1].Title)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go pageWorker(i, &wg, chunks[i], dbh)
+	}
+
+	wg.Wait()
+
+	end_time := time.Now()
+	logger.Info("Completed in %s\n", end_time.Sub(start_time))
+}
+
+func pageWorker(id int, wg *sync.WaitGroup, pages []Page, dbh *sql.DB) {
+	defer wg.Done()
+	inserts := []*Insert{} // etymology : lemma : [definitions...]
+	for _, page := range pages {
 		word := page.Title
-		inserts := []*Insert{} // etymology : lemma : [definitions...]
 		logger.Debug("Processing page: %s\n", word)
 
 		// convert the text to a byte string
@@ -196,24 +223,19 @@ func main() {
 			// need to get the lemmas via regexp
 			logger.Debug("Parsing by lemmas\n")
 			lemma_idx := wikiLemmaS.FindAllIndex(text, -1)
-			inserts = parseByLemmas(lemma_idx, text)
+			inserts = append(inserts, parseByLemmas(word, lemma_idx, text)...)
 		} else {
 			logger.Debug("Parsing by etymologies\n")
-			inserts = parseByEtymologies(etymology_idx, text)
+			inserts = append(inserts, parseByEtymologies(word, etymology_idx, text)...)
 		}
-
-		logger.Debug("Definition map:\n%+v\n", inserts)
-
-		// perform inserts
-		inserted := performInserts(dbh, word, inserts)
-		logger.Info("Inserted %d records for %s\n", inserted, word)
 	}
 
-	end_time := time.Now()
-	logger.Info("Completed in %s\n", end_time.Sub(start_time))
+	// perform inserts
+	inserted := performInserts(dbh, inserts)
+	logger.Info("[%d] Inserted %d records for %d pages\n", id, inserted, len(pages))
 }
 
-func performInserts(dbh *sql.DB, word string, inserts []*Insert) int {
+func performInserts(dbh *sql.DB, inserts []*Insert) int {
 	ins_count := 0
 	query := `INSERT INTO dictionary (word, lemma, etymology_no, definition_no, definition)
               VALUES (?, ?, ?, ?, ?)`
@@ -228,17 +250,13 @@ func performInserts(dbh *sql.DB, word string, inserts []*Insert) int {
 	defer sth.Close()
 
 	for _, ins := range inserts {
-		et_no := ins.Etymology
-		defs := ins.LemmaDefs
-
-		logger.Debug("performInserts> et_no=>'%d' defs=>'%+v'\n", et_no, defs)
-		for key, val := range defs {
+		logger.Debug("performInserts> et_no=>'%d' defs=>'%+v'\n", ins.Etymology, ins.LemmaDefs)
+		for key, val := range ins.LemmaDefs {
 			lemma := key
-			for i, def := range val {
-				def_no := i
+			for def_no, def := range val {
 				logger.Debug("performInserts> Inserting values: word=>'%s', lemma=>'%s', et_no=>'%d', def_no=>'%d', def=>'%s'\n",
-					word, lemma, et_no, def_no, def)
-				_, err := sth.Exec(word, lemma, et_no, def_no, def)
+					ins.Word, lemma, ins.Etymology, def_no, def)
+				_, err := sth.Exec(ins.Word, lemma, ins.Etymology, def_no, def)
 				check(err)
 				ins_count++
 			}
@@ -251,11 +269,11 @@ func performInserts(dbh *sql.DB, word string, inserts []*Insert) int {
 	return ins_count
 }
 
-func parseByEtymologies(et_list [][]int, text []byte) []*Insert {
+func parseByEtymologies(word string, et_list [][]int, text []byte) []*Insert {
 	inserts := []*Insert{}
 	et_size := len(et_list)
 	for i := 0; i < et_size; i++ {
-		ins := &Insert{Etymology: i, LemmaDefs: make(map[string][]string)}
+        ins := &Insert{Word: word, Etymology: i, LemmaDefs: make(map[string][]string)}
 		section := []byte{}
 		if i+1 >= et_size {
 			section = getSection(et_list[i][1], -1, text)
@@ -294,13 +312,13 @@ func parseByEtymologies(et_list [][]int, text []byte) []*Insert {
 	return inserts
 }
 
-func parseByLemmas(lem_list [][]int, text []byte) []*Insert {
+func parseByLemmas(word string, lem_list [][]int, text []byte) []*Insert {
 	inserts := []*Insert{}
 	lem_size := len(lem_list)
 	logger.Debug("parseByLemmas> Found %d lemmas\n", lem_size)
 
 	for i := 0; i < lem_size; i++ {
-		ins := &Insert{Etymology: 0, LemmaDefs: make(map[string][]string)}
+        ins := &Insert{Word: word, Etymology: 0, LemmaDefs: make(map[string][]string)}
 		ith_idx := adjustIndexLW(lem_list[i][0], text)
 		lemma := string(text[ith_idx+3 : lem_list[i][1]-3])
 
