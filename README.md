@@ -16,6 +16,8 @@ Usage of wiktionary-parser:
         Log to this file
     -make_cache
         Make a cache file of the parsed XML
+    -threads int
+        Set the number of threads to use for parsing (default 5)
     -use_cache
         Use a 'gob' of the parsed XML file
     -verbose
