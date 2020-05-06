@@ -56,8 +56,7 @@ Usage of wiktionary-parser:
 - Index is setup over word, lemma, etymology\_no, definition\_no
 
 ### Statistics
-- The wiktionary dump as of 20200401 that is only the current version is ~3.3GB
-- The database (20200416) file that is built is ~98MB
-  - 717,438 words
-  - 941,713 definitions
+- The database (20200506) file that is built is ~127MB (51MB compressed)
+  - 914,799 words
+  - 1,098,087 definitions
   - 14 lemmas
