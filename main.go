@@ -66,7 +66,7 @@ type Revision struct {
 }
 
 type Insert struct {
-    Word      string
+	Word      string
 	Etymology int
 	LemmaDefs map[string][]string
 }
@@ -77,7 +77,7 @@ func main() {
 	lang := flag.String("lang", "English", "Language to target for parsing")
 	cacheFile := flag.String("cache_file", "xmlCache.gob", "Use this as the cache file")
 	logFile := flag.String("log_file", "", "Log to this file")
-    threads := flag.Int("threads", 5, "Number of threads to use for parsing")
+	threads := flag.Int("threads", 5, "Number of threads to use for parsing")
 	useCache := flag.Bool("use_cache", false, "Use a 'gob' of the parsed XML file")
 	makeCache := flag.Bool("make_cache", false, "Make a cache file of the parsed XML")
 	verbose := flag.Bool("verbose", false, "Use verbose logging")
@@ -165,7 +165,7 @@ func main() {
 	}
 
 	logger.Debug("Have %d chunks\n", len(chunks))
-	logger.Debug("Chunk Page Last: %s Page Last: %s\n", chunks[4][len(chunks[4])-1].Title, data.Pages[len(data.Pages)-1].Title)
+	logger.Debug("Chunk Page Last: %s Page Last: %s\n", chunks[len(chunks)-1][len(chunks[len(chunks)-1])-1].Title, data.Pages[len(data.Pages)-1].Title)
 
 	var wg sync.WaitGroup
 	for i := 0; i < *threads; i++ {
@@ -274,7 +274,7 @@ func parseByEtymologies(word string, et_list [][]int, text []byte) []*Insert {
 	inserts := []*Insert{}
 	et_size := len(et_list)
 	for i := 0; i < et_size; i++ {
-        ins := &Insert{Word: word, Etymology: i, LemmaDefs: make(map[string][]string)}
+		ins := &Insert{Word: word, Etymology: i, LemmaDefs: make(map[string][]string)}
 		section := []byte{}
 		if i+1 >= et_size {
 			section = getSection(et_list[i][1], -1, text)
@@ -319,7 +319,7 @@ func parseByLemmas(word string, lem_list [][]int, text []byte) []*Insert {
 	logger.Debug("parseByLemmas> Found %d lemmas\n", lem_size)
 
 	for i := 0; i < lem_size; i++ {
-        ins := &Insert{Word: word, Etymology: 0, LemmaDefs: make(map[string][]string)}
+		ins := &Insert{Word: word, Etymology: 0, LemmaDefs: make(map[string][]string)}
 		ith_idx := adjustIndexLW(lem_list[i][0], text)
 		lemma := string(text[ith_idx+3 : lem_list[i][1]-3])
 
@@ -406,6 +406,13 @@ func getLanguageSection(text []byte) []byte {
 	indices := wikiLang.FindAllIndex(text, -1)
 	indices_size := len(indices)
 
+	logger.Debug("CORPUS: %s\n", string(text))
+	logger.Debug("CORPUS SIZE: %d INDICES_SIZE: %d INDICES: %+v\n", len(text), indices_size, indices)
+
+	if indices_size == 0 {
+		return text
+	}
+
 	// when the match has a leading \s, remove it
 	if text[indices[0][0] : indices[0][0]+1][0] == byte('\n') {
 		indices[0][0]++
@@ -446,7 +453,7 @@ func getLanguageSection(text []byte) []byte {
 // filter out the pages that are not words in the desired language
 func filterPages(wikidata *WikiData) {
 	engCheck := regexp.MustCompile(fmt.Sprintf(`==%s==`, language))
-	spaceCheck := regexp.MustCompile(`[-:\s0-9]`)
+	spaceCheck := regexp.MustCompile(`[:0-9]`)
 	skipCount := 0
 	i := 0
 	for i < len(wikidata.Pages) {
