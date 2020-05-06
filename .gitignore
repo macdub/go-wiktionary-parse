@@ -4,4 +4,3 @@ logs/
 scratch/
 build/
 *.db
-*.gz
