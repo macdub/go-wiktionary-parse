@@ -1,7 +1,6 @@
 package main
 
 import (
-	//".wikitemplates"
 	"database/sql"
 	"encoding/gob"
 	"encoding/xml"
@@ -14,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+    "go-wikitionary-parse/lib/wikitemplates"
 	"github.com/macdub/go-colorlog"
 	_ "github.com/mattn/go-sqlite3"
 )

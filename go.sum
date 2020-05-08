@@ -1,0 +1,8 @@
+github.com/golang-collections/collections v0.0.0-20130729185459-604e922904d3 h1:zN2lZNZRflqFyxVaTIU61KNKQ9C0055u9CAfpmqUvo4=
+github.com/golang-collections/collections v0.0.0-20130729185459-604e922904d3/go.mod h1:nPpo7qLxd6XL3hWJG/O60sR8ZKfMCiIoNap5GvD12KU=
+github.com/macdub/go-colorlog v0.0.0-20200414220504-46fb3042b7b5 h1:TLA9CmhwmQf37u3xbgyEwX99I6O2t3zpWdzJzGb0yMw=
+github.com/macdub/go-colorlog v0.0.0-20200414220504-46fb3042b7b5/go.mod h1:4QyXvbjKUKeG1RZlnI8OkbIsc6QRKswFjGSXM9M5Zwo=
+github.com/macdub/go-colorlog v1.0.0 h1:eEbruJ29tH54ZEWTY54y3ZheI3OhpWJsIrBKamO6fFE=
+github.com/macdub/go-colorlog v1.0.0/go.mod h1:4QyXvbjKUKeG1RZlnI8OkbIsc6QRKswFjGSXM9M5Zwo=
+github.com/mattn/go-sqlite3 v2.0.3+incompatible h1:gXHsfypPkaMZrKbD5209QV9jbUTJKjyR5WD3HYQSd+U=
+github.com/mattn/go-sqlite3 v2.0.3+incompatible/go.mod h1:FPy6KqzDD04eiIsT53CuJW3U88zkxoIYsOqkbpncsNc=
