@@ -20,6 +20,8 @@ Usage of wiktionary-parser:
         Set the number of threads to use for parsing (default 5)
     -use_cache
         Use a 'gob' of the parsed XML file
+    -purge
+        Purge the existing database provided by the database flag
     -verbose
         Use verbose logging
 ```
