@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+    "bytes"
 
     "go-wikitionary-parse/lib/wikitemplates"
 	"github.com/macdub/go-colorlog"
@@ -25,8 +26,8 @@ var (
 	wikiLemmaS     *regexp.Regexp = regexp.MustCompile(`(\s===|^===)[\w\s]+===`)       // lemma match for single etymology
 	wikiEtymologyS *regexp.Regexp = regexp.MustCompile(`(\s===|^===)Etymology===`)     // check for singular etymology
 	wikiEtymologyM *regexp.Regexp = regexp.MustCompile(`(\s===|^===)Etymology \d+===`) // these heading may or may not have a number designation
-	wikiNumListAny *regexp.Regexp = regexp.MustCompile(`\s?#[\*:]? `)                  // used to find all num list indices
-	wikiNumList    *regexp.Regexp = regexp.MustCompile(`\s?#[^:\*] `)                  // used to find the num list entries that are of concern
+	wikiNumListAny *regexp.Regexp = regexp.MustCompile(`\s##?[\*:]*? `)               // used to find all num list indices
+	wikiNumList    *regexp.Regexp = regexp.MustCompile(`\s#[^:\*] `)             // used to find the num list entries that are of concern
 	wikiGenHeading *regexp.Regexp = regexp.MustCompile(`(\s=+|^=+)[\w\s]+`)            // generic heading search
 	wikiNewLine    *regexp.Regexp = regexp.MustCompile(`\n`)
 	wikiBracket    *regexp.Regexp = regexp.MustCompile(`[\[\]]+`)
@@ -34,6 +35,9 @@ var (
 	wikiModifier   *regexp.Regexp = regexp.MustCompile(`\{\{m\|\w+\|([\w\s]+)\}\}`)
 	wikiLabel      *regexp.Regexp = regexp.MustCompile(`\{\{(la?be?l?)\|\w+\|([\w\s\|'",;\(\)_\[\]-]+)\}\}`)
 	wikiTplt       *regexp.Regexp = regexp.MustCompile(`\{\{|\}\}`) // open close template bounds "{{ ... }}"
+    wikiExample    *regexp.Regexp = regexp.MustCompile(`\{\{examples(.+)\}\}`)
+    //wikiRefs       *regexp.Regexp = regexp.MustCompile(`\<ref\>(.*?)\</ref\>`)
+    htmlBreak      *regexp.Regexp = regexp.MustCompile(`\<br\>`)
 
 	// other stuff
 	language  string             = ""
@@ -80,6 +84,7 @@ func main() {
 	threads := flag.Int("threads", 5, "Number of threads to use for parsing")
 	useCache := flag.Bool("use_cache", false, "Use a 'gob' of the parsed XML file")
 	makeCache := flag.Bool("make_cache", false, "Make a cache file of the parsed XML")
+    purge := flag.Bool("purge", false, "Purge the selected database")
 	verbose := flag.Bool("verbose", false, "Use verbose logging")
 	flag.Parse()
 
@@ -105,6 +110,7 @@ func main() {
 	logger.Info("| Use Cache     :    %t\n", *useCache)
 	logger.Info("| Make Cache    :    %t\n", *makeCache)
 	logger.Info("| Verbose       :    %t\n", *verbose)
+    logger.Info("| Purge         :    %t\n", *purge)
 	logger.Info("+--------------------------------------------------\n")
 
 	logger.Debug("NOTE: input language should be provided as a proper noun. (e.g. English, French, West Frisian, etc.)\n")
@@ -122,6 +128,11 @@ func main() {
 		d := parseXML(*makeCache, *iFile, *cacheFile)
 		data = d
 	}
+
+    if *purge {
+        err := os.Remove(*db)
+        check(err)
+    }
 
 	logger.Debug("Number of Pages: %d\n", len(data.Pages))
 	logger.Info("Opening database\n")
@@ -193,14 +204,20 @@ func pageWorker(id int, wg *sync.WaitGroup, pages []Page, dbh *sql.DB) {
 		text = wikiModifier.ReplaceAll(text, []byte("'$1'"))
 		logger.Debug("Modifier size: %d\n", len(text))
 
-		text = wikiLabel.ReplaceAll(text, []byte("(${2})"))
-		logger.Debug("Label size: %d\n", len(text))
+		//text = wikiLabel.ReplaceAll(text, []byte("(${2})"))
+		//logger.Debug("Label size: %d\n", len(text))
+
+        text = wikiExample.ReplaceAll(text, []byte(""))
+        logger.Debug("Example size: %d\n", len(text))
 
 		text = wikiWordAlt.ReplaceAll(text, []byte("$1"))
 		logger.Debug("WordAlt size: %d\n", len(text))
 
 		text = wikiBracket.ReplaceAll(text, []byte(""))
 		logger.Debug("Bracket size: %d\n", len(text))
+
+        text = htmlBreak.ReplaceAll(text, []byte(" "))
+        logger.Debug("Html Break size: %d\n", len(text))
 
 		text_size := len(text)
 		logger.Debug("Starting Size of corpus: %d bytes\n", text_size)
@@ -298,7 +315,13 @@ func parseByEtymologies(word string, et_list [][]int, text []byte) []*Insert {
 				continue
 			}
 
-			if j+1 >= lemma_idx_size {
+            nHeading := wikiGenHeading.FindIndex(section[lemma_idx[j][1]:])
+            if len(nHeading) > 0  {
+                nHeading[0] = nHeading[0] + lemma_idx[j][1]
+                nHeading[1] = nHeading[1] + lemma_idx[j][1]
+                logger.Debug("parseByLemmas> LEM_LIST %d: %+v NHEADING: %+v\n", j, lemma_idx[j], nHeading)
+                definitions = getDefinitions(lemma_idx[j][1], nHeading[0], section)
+            } else if j+1 >= lemma_idx_size {
 				definitions = getDefinitions(lemma_idx[j][1], -1, section)
 			} else {
 				jth_1_idx := adjustIndexLW(lemma_idx[j+1][0], section)
@@ -331,10 +354,11 @@ func parseByLemmas(word string, lem_list [][]int, text []byte) []*Insert {
 		}
 
 		definitions := []string{}
-		if i+1 >= lem_size {
-			definitions = getDefinitions(lem_list[i][1], -1, text)
+        if i+1 >= lem_size {
+            definitions = getDefinitions(lem_list[i][1], -1, text)
 		} else {
 			ith_1_idx := adjustIndexLW(lem_list[i+1][0], text)
+            logger.Debug("parseByLemmas> LEMMA: %s\n", string(text[lem_list[i][1]: ith_1_idx]))
 			definitions = getDefinitions(lem_list[i][1], ith_1_idx, text)
 		}
 
@@ -356,6 +380,14 @@ func getDefinitions(start int, end int, text []byte) []string {
 	} else {
 		lemma_sect = text[start:end]
 	}
+
+    logger.Debug("getDefinitions> TEXT: %s\n", string(text))
+    nHeading := wikiGenHeading.FindIndex(text[start:])
+    logger.Debug("getDefinitions> START: %d END: %d NHEADING: %+v\n", start, end, nHeading)
+    if len(nHeading) > 0 && nHeading[1]+start < end {
+        nHeading[0], nHeading[1] = nHeading[0]+start, nHeading[1]+start
+        lemma_sect = text[start:nHeading[0]]
+    }
 
 	nl_indices := wikiNumListAny.FindAllIndex(lemma_sect, -1)
 	logger.Debug("getDefinitions> Found %d NumList entries\n", len(nl_indices))
@@ -387,15 +419,22 @@ func getDefinitions(start int, end int, text []byte) []string {
 
 func parseDefinition(start int, end int, text []byte) []byte {
 	def := text[start:end]
-	idx := wikiNewLine.FindIndex(def)
-
-	if idx != nil {
-		def = def[:idx[0]]
-	}
+    //def = wikiNewLine.ReplaceAll(def, []byte(" "))
 
 	// need to parse the templates in the definition
-	//idx = wikiTplt.FindAllIndex(def, -1)
-	return def
+    sDef, err := wikitemplates.ParseRecursive(def)
+    check(err)
+
+    def = []byte(sDef)
+    newline := wikiNewLine.FindIndex(def)
+
+    if len(newline) > 0 {
+        def = def[:newline[0]]
+    }
+
+    def = bytes.TrimSpace(def)
+
+    return def
 }
 
 func getLanguageSection(text []byte) []byte {
