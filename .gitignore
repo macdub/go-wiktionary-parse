@@ -4,5 +4,6 @@ logs/
 scratch/
 build/
 dbs/
+dumps/
 *.db
 *.gz
