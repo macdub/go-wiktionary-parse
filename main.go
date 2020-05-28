@@ -33,7 +33,7 @@ var (
 	wikiBracket    *regexp.Regexp = regexp.MustCompile(`[\[\]]+`)
 	wikiWordAlt    *regexp.Regexp = regexp.MustCompile(`\[\[([\w\s]+)\|[\w\s]+\]\]`)
 	wikiModifier   *regexp.Regexp = regexp.MustCompile(`\{\{m\|\w+\|([\w\s]+)\}\}`)
-	wikiLabel      *regexp.Regexp = regexp.MustCompile(`\{\{(la?be?l?)\|\w+\|([\w\s\|'",;\(\)_\[\]-]+)\}\}`)
+	wikiLabel      *regexp.Regexp = regexp.MustCompile(`\{\{(la?b?e?l?)\|\w+\|([\w\s\|'",;\(\)_\[\]-]+)\}\}`)
 	wikiTplt       *regexp.Regexp = regexp.MustCompile(`\{\{|\}\}`) // open close template bounds "{{ ... }}"
     wikiExample    *regexp.Regexp = regexp.MustCompile(`\{\{examples(.+)\}\}`)
     //wikiRefs       *regexp.Regexp = regexp.MustCompile(`\<ref\>(.*?)\</ref\>`)
@@ -42,7 +42,7 @@ var (
 	// other stuff
 	language  string             = ""
 	logger    *colorlog.ColorLog = &colorlog.ColorLog{}
-	lemmaList []string           = []string{"Proper noun", "Noun", "Adjective", "Adverb",
+	lexicalCategory []string           = []string{"Proper noun", "Noun", "Adjective", "Adverb",
 		"Verb", "Article", "Particle", "Conjunction",
 		"Pronoun", "Determiner", "Interjection", "Morpheme",
 		"Numeral", "Preposition", "Postposition"}
@@ -144,7 +144,7 @@ func main() {
                              (
                                  id INTEGER PRIMARY KEY,
                                  word TEXT,
-                                 lemma TEXT,
+                                 lexical_category TEXT,
                                  etymology_no INTEGER,
                                  definition_no INTEGER,
                                  definition TEXT
@@ -153,7 +153,7 @@ func main() {
 	sth.Exec()
 
 	sth, err = dbh.Prepare(`CREATE INDEX IF NOT EXISTS dict_word_idx
-                            ON dictionary (word, lemma, etymology_no, definition_no)`)
+                            ON dictionary (word, lexical_category, etymology_no, definition_no)`)
 
 	check(err)
 	sth.Exec()
@@ -255,7 +255,7 @@ func pageWorker(id int, wg *sync.WaitGroup, pages []Page, dbh *sql.DB) {
 
 func performInserts(dbh *sql.DB, inserts []*Insert) int {
 	ins_count := 0
-	query := `INSERT INTO dictionary (word, lemma, etymology_no, definition_no, definition)
+	query := `INSERT INTO dictionary (word, lexical_category, etymology_no, definition_no, definition)
               VALUES (?, ?, ?, ?, ?)`
 
 	logger.Debug("performInserts> Preparing insert query...\n")
@@ -272,7 +272,7 @@ func performInserts(dbh *sql.DB, inserts []*Insert) int {
 		for key, val := range ins.LemmaDefs {
 			lemma := key
 			for def_no, def := range val {
-				logger.Debug("performInserts> Inserting values: word=>'%s', lemma=>'%s', et_no=>'%d', def_no=>'%d', def=>'%s'\n",
+				logger.Debug("performInserts> Inserting values: word=>'%s', lexical category=>'%s', et_no=>'%d', def_no=>'%d', def=>'%s'\n",
 					ins.Word, lemma, ins.Etymology, def_no, def)
 				_, err := sth.Exec(ins.Word, lemma, ins.Etymology, def_no, def)
 				check(err)
@@ -310,7 +310,7 @@ func parseByEtymologies(word string, et_list [][]int, text []byte) []*Insert {
 			lemma := string(section[jth_idx+4 : lemma_idx[j][1]-4])
 			logger.Debug("parseByEtymologies> [%2d] lemma: %s\n", j, lemma)
 
-			if !stringInSlice(lemma, lemmaList) {
+			if !stringInSlice(lemma, lexicalCategory) {
 				logger.Debug("parseByLemmas> Lemma '%s' not in list. Skipping...\n", lemma)
 				continue
 			}
@@ -348,7 +348,7 @@ func parseByLemmas(word string, lem_list [][]int, text []byte) []*Insert {
 
 		logger.Debug("parseByLemmas> [%2d] working on lemma '%s'\n", i, lemma)
 
-		if !stringInSlice(lemma, lemmaList) {
+		if !stringInSlice(lemma, lexicalCategory) {
 			logger.Debug("parseByLemmas> Lemma '%s' not in list. Skipping...\n", lemma)
 			continue
 		}
