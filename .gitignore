@@ -7,3 +7,4 @@ dbs/
 dumps/
 *.db
 *.gz
+utils/
