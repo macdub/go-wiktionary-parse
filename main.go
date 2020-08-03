@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/gob"
 	"encoding/xml"
@@ -12,22 +13,21 @@ import (
 	"strings"
 	"sync"
 	"time"
-    "bytes"
 
-    "go-wikitionary-parse/lib/wikitemplates"
 	"github.com/macdub/go-colorlog"
 	_ "github.com/mattn/go-sqlite3"
+	"go-wikitionary-parse/lib/wikitemplates"
 )
 
 var (
 	// regex pointers
 	wikiLang       *regexp.Regexp = regexp.MustCompile(`(\s==|^==)[\w\s]+==`)          // most languages are a single word; there are some that are multiple words
-	wikiLemmaM     *regexp.Regexp = regexp.MustCompile(`(\s====|^====)[\w\s]+====`)    // lemmas could be multi-word (e.g. "Proper Noun") match for multi-etymology
-	wikiLemmaS     *regexp.Regexp = regexp.MustCompile(`(\s===|^===)[\w\s]+===`)       // lemma match for single etymology
+	wikiLexM       *regexp.Regexp = regexp.MustCompile(`(\s====|^====)[\w\s]+====`)    // lexical category could be multi-word (e.g. "Proper Noun") match for multi-etymology
+	wikiLexS       *regexp.Regexp = regexp.MustCompile(`(\s===|^===)[\w\s]+===`)       // lexical category match for single etymology
 	wikiEtymologyS *regexp.Regexp = regexp.MustCompile(`(\s===|^===)Etymology===`)     // check for singular etymology
 	wikiEtymologyM *regexp.Regexp = regexp.MustCompile(`(\s===|^===)Etymology \d+===`) // these heading may or may not have a number designation
-	wikiNumListAny *regexp.Regexp = regexp.MustCompile(`\s##?[\*:]*? `)               // used to find all num list indices
-	wikiNumList    *regexp.Regexp = regexp.MustCompile(`\s#[^:\*] `)             // used to find the num list entries that are of concern
+	wikiNumListAny *regexp.Regexp = regexp.MustCompile(`\s##?[\*:]*? `)                // used to find all num list indices
+	wikiNumList    *regexp.Regexp = regexp.MustCompile(`\s#[^:\*] `)                   // used to find the num list entries that are of concern
 	wikiGenHeading *regexp.Regexp = regexp.MustCompile(`(\s=+|^=+)[\w\s]+`)            // generic heading search
 	wikiNewLine    *regexp.Regexp = regexp.MustCompile(`\n`)
 	wikiBracket    *regexp.Regexp = regexp.MustCompile(`[\[\]]+`)
@@ -35,13 +35,13 @@ var (
 	wikiModifier   *regexp.Regexp = regexp.MustCompile(`\{\{m\|\w+\|([\w\s]+)\}\}`)
 	wikiLabel      *regexp.Regexp = regexp.MustCompile(`\{\{(la?b?e?l?)\|\w+\|([\w\s\|'",;\(\)_\[\]-]+)\}\}`)
 	wikiTplt       *regexp.Regexp = regexp.MustCompile(`\{\{|\}\}`) // open close template bounds "{{ ... }}"
-    wikiExample    *regexp.Regexp = regexp.MustCompile(`\{\{examples(.+)\}\}`)
-    //wikiRefs       *regexp.Regexp = regexp.MustCompile(`\<ref\>(.*?)\</ref\>`)
-    htmlBreak      *regexp.Regexp = regexp.MustCompile(`\<br\>`)
+	wikiExample    *regexp.Regexp = regexp.MustCompile(`\{\{examples(.+)\}\}`)
+	//wikiRefs       *regexp.Regexp = regexp.MustCompile(`\<ref\>(.*?)\</ref\>`)
+	htmlBreak *regexp.Regexp = regexp.MustCompile(`\<br\>`)
 
 	// other stuff
-	language  string             = ""
-	logger    *colorlog.ColorLog = &colorlog.ColorLog{}
+	language        string             = ""
+	logger          *colorlog.ColorLog = &colorlog.ColorLog{}
 	lexicalCategory []string           = []string{"Proper noun", "Noun", "Adjective", "Adverb",
 		"Verb", "Article", "Particle", "Conjunction",
 		"Pronoun", "Determiner", "Interjection", "Morpheme",
@@ -72,7 +72,7 @@ type Revision struct {
 type Insert struct {
 	Word      string
 	Etymology int
-	LemmaDefs map[string][]string
+	CatDefs   map[string][]string
 }
 
 func main() {
@@ -84,7 +84,7 @@ func main() {
 	threads := flag.Int("threads", 5, "Number of threads to use for parsing")
 	useCache := flag.Bool("use_cache", false, "Use a 'gob' of the parsed XML file")
 	makeCache := flag.Bool("make_cache", false, "Make a cache file of the parsed XML")
-    purge := flag.Bool("purge", false, "Purge the selected database")
+	purge := flag.Bool("purge", false, "Purge the selected database")
 	verbose := flag.Bool("verbose", false, "Use verbose logging")
 	flag.Parse()
 
@@ -110,7 +110,7 @@ func main() {
 	logger.Info("| Use Cache     :    %t\n", *useCache)
 	logger.Info("| Make Cache    :    %t\n", *makeCache)
 	logger.Info("| Verbose       :    %t\n", *verbose)
-    logger.Info("| Purge         :    %t\n", *purge)
+	logger.Info("| Purge         :    %t\n", *purge)
 	logger.Info("+--------------------------------------------------\n")
 
 	logger.Debug("NOTE: input language should be provided as a proper noun. (e.g. English, French, West Frisian, etc.)\n")
@@ -129,10 +129,10 @@ func main() {
 		data = d
 	}
 
-    if *purge {
-        err := os.Remove(*db)
-        check(err)
-    }
+	if *purge {
+		err := os.Remove(*db)
+		check(err)
+	}
 
 	logger.Debug("Number of Pages: %d\n", len(data.Pages))
 	logger.Info("Opening database\n")
@@ -166,9 +166,9 @@ func main() {
 	size := len(data.Pages) / *threads
 	logger.Debug("Chunk size: %d\n", size)
 	logger.Debug(" >> %d\n", len(data.Pages)/size)
-	for i := 0; i < len(data.Pages)/size; i++ {
+	for i := 0; i < *threads; i++ {
 		end := size + size*i
-		if end > len(data.Pages) || i+1 == len(data.Pages)/size {
+		if end > len(data.Pages) || i+1 == *threads {
 			end = len(data.Pages)
 		}
 		logger.Debug("Splitting chunk %d :: [%d, %d]\n", i, size*i, end)
@@ -192,7 +192,7 @@ func main() {
 
 func pageWorker(id int, wg *sync.WaitGroup, pages []Page, dbh *sql.DB) {
 	defer wg.Done()
-	inserts := []*Insert{} // etymology : lemma : [definitions...]
+	inserts := []*Insert{} // etymology : lexical category : [definitions...]
 	for _, page := range pages {
 		word := page.Title
 		logger.Debug("Processing page: %s\n", word)
@@ -207,8 +207,8 @@ func pageWorker(id int, wg *sync.WaitGroup, pages []Page, dbh *sql.DB) {
 		//text = wikiLabel.ReplaceAll(text, []byte("(${2})"))
 		//logger.Debug("Label size: %d\n", len(text))
 
-        text = wikiExample.ReplaceAll(text, []byte(""))
-        logger.Debug("Example size: %d\n", len(text))
+		text = wikiExample.ReplaceAll(text, []byte(""))
+		logger.Debug("Example size: %d\n", len(text))
 
 		text = wikiWordAlt.ReplaceAll(text, []byte("$1"))
 		logger.Debug("WordAlt size: %d\n", len(text))
@@ -216,8 +216,8 @@ func pageWorker(id int, wg *sync.WaitGroup, pages []Page, dbh *sql.DB) {
 		text = wikiBracket.ReplaceAll(text, []byte(""))
 		logger.Debug("Bracket size: %d\n", len(text))
 
-        text = htmlBreak.ReplaceAll(text, []byte(" "))
-        logger.Debug("Html Break size: %d\n", len(text))
+		text = htmlBreak.ReplaceAll(text, []byte(" "))
+		logger.Debug("Html Break size: %d\n", len(text))
 
 		text_size := len(text)
 		logger.Debug("Starting Size of corpus: %d bytes\n", text_size)
@@ -233,15 +233,15 @@ func pageWorker(id int, wg *sync.WaitGroup, pages []Page, dbh *sql.DB) {
 			etymology_idx = wikiEtymologyS.FindAllIndex(text, -1)
 		}
 		/*
-		   When there is only a single or no etymology, then lemmas are of the form ===[\w\s]+===
-		   Otherwise, then lemmas are of the form ====[\w\s]+====
+		   When there is only a single or no etymology, then lexical catetories are of the form ===[\w\s]+===
+		   Otherwise, then lexical catigories are of the form ====[\w\s]+====
 		*/
 		logger.Debug("Found %d etymologies\n", len(etymology_idx))
 		if len(etymology_idx) <= 1 {
-			// need to get the lemmas via regexp
-			logger.Debug("Parsing by lemmas\n")
-			lemma_idx := wikiLemmaS.FindAllIndex(text, -1)
-			inserts = append(inserts, parseByLemmas(word, lemma_idx, text)...)
+			// need to get the lexical category via regexp
+			logger.Debug("Parsing by lexical category\n")
+			lexcat_idx := wikiLexS.FindAllIndex(text, -1)
+			inserts = append(inserts, parseByLexicalCategory(word, lexcat_idx, text)...)
 		} else {
 			logger.Debug("Parsing by etymologies\n")
 			inserts = append(inserts, parseByEtymologies(word, etymology_idx, text)...)
@@ -268,13 +268,13 @@ func performInserts(dbh *sql.DB, inserts []*Insert) int {
 	defer sth.Close()
 
 	for _, ins := range inserts {
-		logger.Debug("performInserts> et_no=>'%d' defs=>'%+v'\n", ins.Etymology, ins.LemmaDefs)
-		for key, val := range ins.LemmaDefs {
-			lemma := key
+		logger.Debug("performInserts> et_no=>'%d' defs=>'%+v'\n", ins.Etymology, ins.CatDefs)
+		for key, val := range ins.CatDefs {
+			category := key
 			for def_no, def := range val {
 				logger.Debug("performInserts> Inserting values: word=>'%s', lexical category=>'%s', et_no=>'%d', def_no=>'%d', def=>'%s'\n",
-					ins.Word, lemma, ins.Etymology, def_no, def)
-				_, err := sth.Exec(ins.Word, lemma, ins.Etymology, def_no, def)
+					ins.Word, category, ins.Etymology, def_no, def)
+				_, err := sth.Exec(ins.Word, category, ins.Etymology, def_no, def)
 				check(err)
 				ins_count++
 			}
@@ -291,7 +291,7 @@ func parseByEtymologies(word string, et_list [][]int, text []byte) []*Insert {
 	inserts := []*Insert{}
 	et_size := len(et_list)
 	for i := 0; i < et_size; i++ {
-		ins := &Insert{Word: word, Etymology: i, LemmaDefs: make(map[string][]string)}
+		ins := &Insert{Word: word, Etymology: i, CatDefs: make(map[string][]string)}
 		section := []byte{}
 		if i+1 >= et_size {
 			section = getSection(et_list[i][1], -1, text)
@@ -301,34 +301,34 @@ func parseByEtymologies(word string, et_list [][]int, text []byte) []*Insert {
 
 		logger.Debug("parseByEtymologies> Section is %d bytes\n", len(section))
 
-		lemma_idx := wikiLemmaM.FindAllIndex(section, -1)
-		lemma_idx_size := len(lemma_idx)
+		lexcat_idx := wikiLexM.FindAllIndex(section, -1)
+		lexcat_idx_size := len(lexcat_idx)
 
 		definitions := []string{}
-		for j := 0; j < lemma_idx_size; j++ {
-			jth_idx := adjustIndexLW(lemma_idx[j][0], section)
-			lemma := string(section[jth_idx+4 : lemma_idx[j][1]-4])
-			logger.Debug("parseByEtymologies> [%2d] lemma: %s\n", j, lemma)
+		for j := 0; j < lexcat_idx_size; j++ {
+			jth_idx := adjustIndexLW(lexcat_idx[j][0], section)
+			lexcat := string(section[jth_idx+4 : lexcat_idx[j][1]-4])
+			logger.Debug("parseByEtymologies> [%2d] lexcat: %s\n", j, lexcat)
 
-			if !stringInSlice(lemma, lexicalCategory) {
-				logger.Debug("parseByLemmas> Lemma '%s' not in list. Skipping...\n", lemma)
+			if !stringInSlice(lexcat, lexicalCategory) {
+				logger.Debug("parseByLemmas> Lexical category '%s' not in list. Skipping...\n", lexcat)
 				continue
 			}
 
-            nHeading := wikiGenHeading.FindIndex(section[lemma_idx[j][1]:])
-            if len(nHeading) > 0  {
-                nHeading[0] = nHeading[0] + lemma_idx[j][1]
-                nHeading[1] = nHeading[1] + lemma_idx[j][1]
-                logger.Debug("parseByLemmas> LEM_LIST %d: %+v NHEADING: %+v\n", j, lemma_idx[j], nHeading)
-                definitions = getDefinitions(lemma_idx[j][1], nHeading[0], section)
-            } else if j+1 >= lemma_idx_size {
-				definitions = getDefinitions(lemma_idx[j][1], -1, section)
+			nHeading := wikiGenHeading.FindIndex(section[lexcat_idx[j][1]:])
+			if len(nHeading) > 0 {
+				nHeading[0] = nHeading[0] + lexcat_idx[j][1]
+				nHeading[1] = nHeading[1] + lexcat_idx[j][1]
+				logger.Debug("parseByLemmas> LEM_LIST %d: %+v NHEADING: %+v\n", j, lexcat_idx[j], nHeading)
+				definitions = getDefinitions(lexcat_idx[j][1], nHeading[0], section)
+			} else if j+1 >= lexcat_idx_size {
+				definitions = getDefinitions(lexcat_idx[j][1], -1, section)
 			} else {
-				jth_1_idx := adjustIndexLW(lemma_idx[j+1][0], section)
-				definitions = getDefinitions(lemma_idx[j][1], jth_1_idx, section)
+				jth_1_idx := adjustIndexLW(lexcat_idx[j+1][0], section)
+				definitions = getDefinitions(lexcat_idx[j][1], jth_1_idx, section)
 			}
 			logger.Debug("parseByEtymologies> Definitions: " + strings.Join(definitions, ", ") + "\n")
-			ins.LemmaDefs[lemma] = definitions
+			ins.CatDefs[lexcat] = definitions
 		}
 		inserts = append(inserts, ins)
 	}
@@ -336,34 +336,35 @@ func parseByEtymologies(word string, et_list [][]int, text []byte) []*Insert {
 	return inserts
 }
 
-func parseByLemmas(word string, lem_list [][]int, text []byte) []*Insert {
+//parseByLemmas
+func parseByLexicalCategory(word string, lex_list [][]int, text []byte) []*Insert {
 	inserts := []*Insert{}
-	lem_size := len(lem_list)
-	logger.Debug("parseByLemmas> Found %d lemmas\n", lem_size)
+	lex_size := len(lex_list)
+	logger.Debug("parseByLexicalCategory> Found %d lexcats\n", lex_size)
 
-	for i := 0; i < lem_size; i++ {
-		ins := &Insert{Word: word, Etymology: 0, LemmaDefs: make(map[string][]string)}
-		ith_idx := adjustIndexLW(lem_list[i][0], text)
-		lemma := string(text[ith_idx+3 : lem_list[i][1]-3])
+	for i := 0; i < lex_size; i++ {
+		ins := &Insert{Word: word, Etymology: 0, CatDefs: make(map[string][]string)}
+		ith_idx := adjustIndexLW(lex_list[i][0], text)
+		lexcat := string(text[ith_idx+3 : lex_list[i][1]-3])
 
-		logger.Debug("parseByLemmas> [%2d] working on lemma '%s'\n", i, lemma)
+		logger.Debug("parseByLexicalCategory> [%2d] working on lexcat '%s'\n", i, lexcat)
 
-		if !stringInSlice(lemma, lexicalCategory) {
-			logger.Debug("parseByLemmas> Lemma '%s' not in list. Skipping...\n", lemma)
+		if !stringInSlice(lexcat, lexicalCategory) {
+			logger.Debug("parseByLexicalCategory> Lemma '%s' not in list. Skipping...\n", lexcat)
 			continue
 		}
 
 		definitions := []string{}
-        if i+1 >= lem_size {
-            definitions = getDefinitions(lem_list[i][1], -1, text)
+		if i+1 >= lex_size {
+			definitions = getDefinitions(lex_list[i][1], -1, text)
 		} else {
-			ith_1_idx := adjustIndexLW(lem_list[i+1][0], text)
-            logger.Debug("parseByLemmas> LEMMA: %s\n", string(text[lem_list[i][1]: ith_1_idx]))
-			definitions = getDefinitions(lem_list[i][1], ith_1_idx, text)
+			ith_1_idx := adjustIndexLW(lex_list[i+1][0], text)
+			logger.Debug("parseByLexicalCategory> LEMMA: %s\n", string(text[lex_list[i][1]:ith_1_idx]))
+			definitions = getDefinitions(lex_list[i][1], ith_1_idx, text)
 		}
 
-		logger.Debug("parseByLemmas> Found %d definitions\n", len(definitions))
-		ins.LemmaDefs[lemma] = definitions
+		logger.Debug("parseByLexicalCategory> Found %d definitions\n", len(definitions))
+		ins.CatDefs[lexcat] = definitions
 
 		inserts = append(inserts, ins)
 	}
@@ -372,42 +373,42 @@ func parseByLemmas(word string, lem_list [][]int, text []byte) []*Insert {
 }
 
 func getDefinitions(start int, end int, text []byte) []string {
-	lemma_sect := []byte{}
+	category := []byte{}
 	defs := []string{}
 
 	if end < 0 {
-		lemma_sect = text[start:]
+		category = text[start:]
 	} else {
-		lemma_sect = text[start:end]
+		category = text[start:end]
 	}
 
-    logger.Debug("getDefinitions> TEXT: %s\n", string(text))
-    nHeading := wikiGenHeading.FindIndex(text[start:])
-    logger.Debug("getDefinitions> START: %d END: %d NHEADING: %+v\n", start, end, nHeading)
-    if len(nHeading) > 0 && nHeading[1]+start < end {
-        nHeading[0], nHeading[1] = nHeading[0]+start, nHeading[1]+start
-        lemma_sect = text[start:nHeading[0]]
-    }
+	logger.Debug("getDefinitions> TEXT: %s\n", string(text))
+	nHeading := wikiGenHeading.FindIndex(text[start:])
+	logger.Debug("getDefinitions> START: %d END: %d NHEADING: %+v\n", start, end, nHeading)
+	if len(nHeading) > 0 && nHeading[1]+start < end {
+		nHeading[0], nHeading[1] = nHeading[0]+start, nHeading[1]+start
+		category = text[start:nHeading[0]]
+	}
 
-	nl_indices := wikiNumListAny.FindAllIndex(lemma_sect, -1)
+	nl_indices := wikiNumListAny.FindAllIndex(category, -1)
 	logger.Debug("getDefinitions> Found %d NumList entries\n", len(nl_indices))
 	nl_indices_size := len(nl_indices)
 	for i := 0; i < nl_indices_size; i++ {
-		ith_idx := adjustIndexLW(nl_indices[i][0], lemma_sect)
-		if string(lemma_sect[ith_idx:nl_indices[i][1]]) != "# " {
+		ith_idx := adjustIndexLW(nl_indices[i][0], category)
+		if string(category[ith_idx:nl_indices[i][1]]) != "# " {
 			logger.Debug("getDefinitions> Got quotation or annotation bullet. Skipping...\n")
 			continue
 		}
 
-		if i+1 >= nl_indices_size && string(lemma_sect[ith_idx:nl_indices[i][1]]) == "# " {
-			def := parseDefinition(nl_indices[i][1], len(lemma_sect), lemma_sect)
+		if i+1 >= nl_indices_size && string(category[ith_idx:nl_indices[i][1]]) == "# " {
+			def := parseDefinition(nl_indices[i][1], len(category), category)
 			logger.Debug("getDefinitions> [%0d] Appending %s to the definition list\n", i, string(def))
 			defs = append(defs, string(def))
 		}
 
-		if i+1 < nl_indices_size && string(lemma_sect[ith_idx:nl_indices[i][1]]) == "# " {
-			ith_1_idx := adjustIndexLW(nl_indices[i+1][0], lemma_sect)
-			def := parseDefinition(nl_indices[i][1], ith_1_idx, lemma_sect)
+		if i+1 < nl_indices_size && string(category[ith_idx:nl_indices[i][1]]) == "# " {
+			ith_1_idx := adjustIndexLW(nl_indices[i+1][0], category)
+			def := parseDefinition(nl_indices[i][1], ith_1_idx, category)
 			logger.Debug("getDefinitions> [%0d] Appending %s to the definition list\n", i, string(def))
 			defs = append(defs, string(def))
 		}
@@ -419,22 +420,22 @@ func getDefinitions(start int, end int, text []byte) []string {
 
 func parseDefinition(start int, end int, text []byte) []byte {
 	def := text[start:end]
-    //def = wikiNewLine.ReplaceAll(def, []byte(" "))
+	//def = wikiNewLine.ReplaceAll(def, []byte(" "))
 
 	// need to parse the templates in the definition
-    sDef, err := wikitemplates.ParseRecursive(def)
-    check(err)
+	sDef, err := wikitemplates.ParseRecursive(def)
+	check(err)
 
-    def = []byte(sDef)
-    newline := wikiNewLine.FindIndex(def)
+	def = []byte(sDef)
+	newline := wikiNewLine.FindIndex(def)
 
-    if len(newline) > 0 {
-        def = def[:newline[0]]
-    }
+	if len(newline) > 0 {
+		def = def[:newline[0]]
+	}
 
-    def = bytes.TrimSpace(def)
+	def = bytes.TrimSpace(def)
 
-    return def
+	return def
 }
 
 func getLanguageSection(text []byte) []byte {
