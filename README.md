@@ -1,6 +1,20 @@
 # go-wiktionary-parse
 This is a tool to parse language dumps from Wiktionary and store the results into a Sqlite database.
 
+
+## Quickstart
+
+```
+git clone https://github.com/faddat/go-wiktionary-parse
+cd go-wikitionary-parse
+wget https://dumps.wikimedia.org/enwiktionary/latest/enwiktionary-latest-pages-articles.xml.bz2
+bzip2 -d enwiktionary-latest-pages-articles.xml.bz2
+go install .
+wiktionary-parser -file enwiktionary-latest-pages-articles.xml -threads 20 -database test.db
+```
+
+
+
 ## Usage
 ```
 Usage of wiktionary-parser:
