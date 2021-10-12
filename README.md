@@ -10,7 +10,7 @@ cd go-wikitionary-parse
 wget https://dumps.wikimedia.org/enwiktionary/latest/enwiktionary-latest-pages-articles.xml.bz2
 bzip2 -d enwiktionary-latest-pages-articles.xml.bz2
 go install .
-wiktionary-parser -file enwiktionary-latest-pages-articles.xml -threads 20 -database test.db
+go-wiktionary-parse -file enwiktionary-latest-pages-articles.xml -threads 20 -database test.db
 ```
 
 
