@@ -5,7 +5,7 @@ This is a tool to parse language dumps from Wiktionary and store the results int
 ## Quickstart
 
 ```
-git clone https://github.com/faddat/go-wiktionary-parse
+git clone https://github.com/macdub/go-wiktionary-parse
 cd go-wikitionary-parse
 wget https://dumps.wikimedia.org/enwiktionary/latest/enwiktionary-latest-pages-articles.xml.bz2
 bzip2 -d enwiktionary-latest-pages-articles.xml.bz2
